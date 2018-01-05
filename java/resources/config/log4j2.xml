@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"  ?>
+
+<Configuration status="WARN"
+               xmlns="jar://F:/maven_repo/org/apache/logging/log4j/log4j-core/2.9.1/log4j-core-2.9.1.jar!/Log4j-config.xsd">
+
+    <Appenders>
+        <Console name="Console" target="SYSTEM_OUT">
+            <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss} [%t] [%p] [%F:%L]:%m%n"></PatternLayout>
+        </Console>
+    </Appenders>
+
+    <Loggers>
+        <Root level="info">
+            <AppenderRef  ref="Console"/>
+        </Root>
+    </Loggers>
+
+</Configuration>
