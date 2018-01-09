@@ -4,7 +4,6 @@ import com.qb.workstation.export.DefaultPropertyReadHandler;
 import com.qb.workstation.export.DefaultPropertyWriteWriteHandler;
 import com.qb.workstation.export.PropertyReadHandler;
 import com.qb.workstation.export.PropertyWriteHandler;
-import org.apache.commons.beanutils.PropertyUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.poi.hssf.usermodel.*;
 import org.apache.poi.hssf.util.HSSFColor;
@@ -12,6 +11,12 @@ import org.apache.poi.openxml4j.exceptions.InvalidFormatException;
 import org.apache.poi.poifs.filesystem.DocumentFactoryHelper;
 import org.apache.poi.poifs.filesystem.POIFSFileSystem;
 import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.ss.usermodel.charts.ChartAxis;
+import org.apache.poi.ss.usermodel.charts.ChartDataSource;
+import org.apache.poi.ss.usermodel.charts.ScatterChartData;
+import org.apache.poi.ss.util.CellReference;
+import org.apache.poi.xssf.usermodel.XSSFChart;
+import org.apache.poi.xssf.usermodel.XSSFDrawing;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,6 +30,48 @@ import java.util.*;
 public class ExcelUtil {
 
     private final static Logger logger = LoggerFactory.getLogger(ExcelUtil.class);
+
+
+    public static void fillScatterChartData(Chart chart, ChartDataSource<?> xChartDataSource,List<ChartDataSource<Number>> yChartDataSource,List<CellReference> serieTitleCellReferences){
+
+        ScatterChartData data = chart.getChartDataFactory().createScatterChartData();
+
+//        ValueAxis bottomAxis = chart.getChartAxisFactory().createValueAxis(AxisPosition.BOTTOM);
+//        ValueAxis leftAxis = chart.getChartAxisFactory().createValueAxis(AxisPosition.LEFT);
+//        leftAxis.setCrosses(AxisCrosses.AUTO_ZERO);
+
+
+        for (int i = 0; i < yChartDataSource.size(); i++) {
+            data.addSerie(xChartDataSource, yChartDataSource.get(i)).setTitle(serieTitleCellReferences.get(i));
+        }
+//        chart.plot(data, bottomAxis, leftAxis);
+        ChartAxis[] chartAxes = chart.getAxis().toArray(new ChartAxis[]{});
+        for (ChartAxis chartAx : chartAxes) {
+            System.out.println(chartAx.getCrosses().name());
+        }
+        data.fillChart(chart,chartAxes);
+//        chart.plot(data, (ChartAxis[]) chartAxes);
+    }
+
+    /**
+     * 查找excel中的图表
+     * @param sheet
+     * @param title
+     * @return
+     */
+    public static Chart findChart(Sheet sheet,String title){
+        XSSFDrawing drawing = (XSSFDrawing)sheet.createDrawingPatriarch();
+
+        List<XSSFChart> charts = drawing.getCharts();
+
+        for (XSSFChart chart : charts) {
+            if(title.equals(chart.getTitle().toString())){
+                return chart;
+            }
+        }
+        return null;
+    }
+
 
     public static <T> List<T> readExcelWithTitle(InputStream inputStream, String sheetName, Class<T> cls, List<String> columns, PropertyReadHandler<T> readHandler) throws IllegalAccessException, InstantiationException, InvocationTargetException, NoSuchMethodException, IOException {
 
@@ -57,8 +104,9 @@ public class ExcelUtil {
 
 
     public static <T> List<T> readExcelWithTitle(InputStream inputStream, int sheetIndex, Class<T> cls, List<String> columns) throws IllegalAccessException, InstantiationException, InvocationTargetException, NoSuchMethodException, IOException {
-        return readExcelWithTitle(inputStream, sheetIndex, cls, columns);
+        return readExcelWithTitle(inputStream, sheetIndex, cls, columns,null);
     }
+
     public static <T> List<T> readExcelWithTitle(InputStream inputStream, int sheetIndex, Class<T> cls, List<String> columns, PropertyReadHandler<T> readHandler) throws IllegalAccessException, InstantiationException, InvocationTargetException, NoSuchMethodException, IOException {
 
         if (cls == null) {
@@ -141,20 +189,16 @@ public class ExcelUtil {
      * @param title              sheet页标题
      * @param headersMap         字段与表头映射。key为字段名，value为表头名
      * @param dataCollection     数据集合
-     * @param propertyHandlerMap 字段属性处理器集合
+     * @param writeHandler       字段属性处理器
      * @param outputStream       输出流
      */
-    public static <T> void exportExcel(String title, LinkedHashMap<String, String> headersMap, Collection<T> dataCollection, Map<String, PropertyWriteHandler<T>> propertyHandlerMap, OutputStream outputStream) {
+    public static <T> void exportExcel(String title, LinkedHashMap<String, String> headersMap, Collection<T> dataCollection, PropertyWriteHandler<T> writeHandler, OutputStream outputStream) {
         title = StringUtils.defaultString(title, "Sheet1");
         if (headersMap == null || headersMap.isEmpty()) {
             logger.warn("未设置表头");
             return;
         }
 
-        if (propertyHandlerMap == null) {
-            propertyHandlerMap = new LinkedHashMap<>();
-        }
-        propertyHandlerMap.values().contains(null);
 
         // 声明一个工作薄
         HSSFWorkbook workbook = new HSSFWorkbook();
@@ -228,15 +272,13 @@ public class ExcelUtil {
 
                 String fieldName = properties[i];
                 try {
-                    Object value = PropertyUtils.getProperty(t, fieldName);
+
 
                     //如果存在属性处理器，通过属性处理器进行处理值，否则使用默认处理器
-                    PropertyWriteHandler propertyWriteHandler = propertyHandlerMap.get(fieldName);
-                    if (propertyWriteHandler != null) {
-
-                        propertyWriteHandler.handle(cell, t, fieldName, value);
+                    if (writeHandler != null && writeHandler.support(fieldName)) {
+                        writeHandler.handle(cell, t, fieldName);
                     } else {
-                        defaultPropertyWriteHandler.handle(cell, t, fieldName, value);
+                        defaultPropertyWriteHandler.handle(cell, t, fieldName);
                     }
                 } catch (NoSuchMethodException e) {
                     e.printStackTrace();
